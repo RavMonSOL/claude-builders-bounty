@@ -1,0 +1,46 @@
+#!/usr/bin/env bash
+# pre-tool-use hook for Claude Code
+# Blocks dangerous bash commands before execution
+# Place in ~/.claude/hooks/pre-tool-use and make executable
+
+set -euo pipefail
+
+# The command to be executed is passed as the first argument
+CMD="${1:-}"
+# If command is empty, allow
+if [ -z "$CMD" ]; then
+  exit 0
+fi
+
+# Determine project path (current working directory)
+PROJECT_PATH="$(pwd)"
+
+# Log file location
+LOG_DIR="${HOME}/.claude/hooks"
+mkdir -p "$LOG_DIR"
+LOG_FILE="${LOG_DIR}/blocked.log"
+
+# Convert command to lowercase for case-insensitive matching
+CMD_LOWER="$(echo "$CMD" | tr '[:upper:]' '[:lower:]')"
+
+# Block if any of these patterns match
+if echo "$CMD_LOWER" | grep -q "rm -rf"; then
+  PATTERN="rm -rf"
+elif echo "$CMD_LOWER" | grep -q "drop table"; then
+  PATTERN="DROP TABLE"
+elif echo "$CMD_LOWER" | grep -q "git push --force"; then
+  PATTERN="git push --force"
+elif echo "$CMD_LOWER" | grep -q "truncate"; then
+  PATTERN="TRUNCATE"
+elif echo "$CMD_LOWER" | grep -q "delete from" && ! echo "$CMD_LOWER" | grep -q "where"; then
+  PATTERN="DELETE FROM without WHERE"
+else
+  # Safe command
+  exit 0
+fi
+
+# Blocked: log and display message
+TIMESTAMP="$(date -u +"%Y-%m-%dT%H:%M:%SZ")"
+echo "[$TIMESTAMP] BLOCKED: $CMD | project: $PROJECT_PATH" >> "$LOG_FILE"
+echo "⚠️ Blocked potentially dangerous command: \"$CMD\" (pattern: $PATTERN)" >&2
+exit 1
